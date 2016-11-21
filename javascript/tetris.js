@@ -1,287 +1,326 @@
-// great wall of global variables
-// travelers beware
-var c = document.getElementsByTagName('canvas')[0];
-var ctx = c.getContext("2d");
-var w = 350;
-var h = 600;
-var ROWS = 20;
-var COLS = 10;
-var BLOCK_W = w/ COLS;
-var BLOCK_H  = h/ ROWS;
-var shape;
-var tetrisBoard = [];
-var currX, currY;
-var firstTime = true;
-var pieceSize;
-var gameOver = false;
+ let Game = function Game(width, height, rows, cols, canvas, difficulty) {
+   this.c = canvas || document.getElementsByTagName('canvas')[0];
+   this.ctx = this.c.getContext("2d");
+   this.w = width || 350;
+   this.h = height || 600;
+   this.ROWS = rows || 20;
+   this.COLS = cols || 10;
+   this.BLOCK_W = this.w / this.COLS;
+   this.BLOCK_H = this.h / this.ROWS;
+   this.shape = [];
+   this.tetrisBoard = [];
+   this.currX = 0;
+   this.currY = 0;
+   this.difficulty = difficulty || 'normal';
+   this.difficulties = {
+     easy: 500,
+     normal: 250,
+     hard: 125
+   };
+   this.firstTime = true;
+   this.pieceSize = 0;
+   this.gameOver = false;
+   this.paused = false;
+   this.score = 0;
+   this.linesKilled = 0;
+   window.addEventListener('resize', this.resizeCanvas.bind(this), false);
+   window.addEventListener("keydown", this.controls.bind(this), false);
+ };
 
-window.addEventListener('resize', resizeCanvas, false);
-window.addEventListener("keydown", controls, false);
+ Game.prototype.destroy = function destroy() {
+   window.removeEventListener('resize', this.resizeCanvas, false);
+   window.removeEventListener("keydown", this.controls.bind(this), false);
+   this.c = null;
+   this.ctx = null;
+ };
 
-function controls(e) {
-  if(e.keyCode == 38) { // up key
-    e.preventDefault();
-    var rotShape = rotate();
-    if(valid(0,0,rotShape)) {
-      shape = rotShape;
-    }
-  } else if(e.keyCode == 39) { // right key
-    e.preventDefault();
-    if(valid(1)) {
-      currX++;
-    }
-  } else if(e.keyCode == 37) { // left key
-    e.preventDefault();
-    if(valid(-1)) {
-      currX--;
-    }
-  } else if(e.keyCode == 40) { // down key
-    e.preventDefault();
-    if(valid(0,1)) {
-      currY++;
-    }
-  } else if(e.keyCode == 32) { // spacebar
-    e.preventDefault();
-    dropDown();
-  } else if(e.keyCode == 82) { // reset 'r'
-    newGame();
-  }
-}
+ Game.prototype.controls = function controls(e) {
+   e.preventDefault();
+   if (e.keyCode == 13) {
+     this.paused = !this.paused;
+     if (this.paused) window.clearInterval(this.ticker);
+     this.ticker = null;
+     if (!this.paused) this.ticker = window.setInterval(this.tick.bind(this), this.difficulties[this.difficulty]);
+   } else if (!this.paused) {
+     switch (e.keyCode) {
+       case 38:
+         let rotShape = this.rotate();
+         if (this.valid(0, 0, rotShape)) {
+           this.shape = rotShape;
+         }
+         break;
+       case 39:
+         if (this.valid(1)) {
+           this.currX++;
+         }
+         break;
+       case 37:
+         if (this.valid(-1)) {
+           this.currX--;
+         }
+         break;
+       case 40:
+         if (this.valid(0, 1)) {
+           this.currY++;
+         }
+         break;
+       case 32:
+         this.dropDown();
+         break;
+       case 82:
+         this.newGame();
+         break;
+     }
+   }
+ };
 
-var pieces = [
-                    [1,1,1,1],
-                    [2,2,2,
-                     2],
-                    [3,3,3,
-                     0,0,3],
-                    [4,4,4,
-                     0,4,0],
-                    [0,5,5,
-                     0,5,5],
-                    [0,6,6,
-                     6,6],
-                    [7,7,0,
-                     0,7,7]];
+ Game.prototype.pieces = [
+   [1, 1, 1, 1],
+   [2, 2, 2,
+     2
+   ],
+   [3, 3, 3,
+     0, 0, 3
+   ],
+   [4, 4, 4,
+     0, 4, 0
+   ],
+   [0, 5, 5,
+     0, 5, 5
+   ],
+   [0, 6, 6,
+     6, 6
+   ],
+   [7, 7, 0,
+     0, 7, 7
+   ]
+ ];
+
+ Game.prototype.baseScore = [40, 100, 300, 1200];
+ Game.prototype.levels = [4800, 10800, 22800, 33600, 52800, 68400, 94800, 115200, 148800, 174000, 214800, 244800, 292800, 327600, 382800, 422400, 484800, 529200, 598800, 648000, 724800, 778800, 862800, 921600, 999999];
+
+ Game.prototype.createShape = function createShape() {
+
+   let randomShape = Math.floor(Math.random() * this.pieces.length);
+
+   if (randomShape === 0) { // if I shape, the matrix will be 4x4
+     this.pieceSize = 4;
+   } else {
+     this.pieceSize = 3;
+   }
+
+   let counter = -this.pieceSize;
+   this.shape = [];
+   for (let i = 0; i < this.pieceSize; i++) {
+     this.shape[i] = [];
+     for (let j = 0; j < this.pieceSize; j++) {
+       if (counter < this.pieces[randomShape].length && i > 0) {
+         this.shape[i][j] = this.pieces[randomShape][counter];
+       } else {
+         this.shape[i][j] = 0;
+       }
+       counter++;
+     }
+   }
+
+   // set dimensions for the shape on the board
+   this.currX = 3;
+   this.currY = -1;
+
+ };
+
+ Game.prototype.rotate = function rotate() {
+
+   let shapeString = this.shape.toString();
+   let boxString = [
+     [0, 0, 0],
+     [0, 5, 5],
+     [0, 5, 5]
+   ].toString();
+
+   // don't rotate the square
+   if (shapeString == boxString) {
+     return this.shape;
+   }
+   var rotShape = [];
+   for (let i = 0; i < this.pieceSize; ++i) {
+     rotShape[i] = [];
+     for (let j = 0; j < this.pieceSize; ++j) {
+       rotShape[i][j] = this.shape[this.pieceSize - j - 1][i];
+     }
+   }
+
+   // set the shape to be that of the rotated shape
+   return rotShape;
+ };
+
+ // clears the board
+ Game.prototype.init = function init() {
+   for (let i = 0; i < this.ROWS; i++) {
+     this.tetrisBoard[i] = [];
+     for (let j = 0; j < this.COLS; j++) {
+       this.tetrisBoard[i][j] = 0;
+     }
+   }
+ };
+
+ Game.prototype.colors = [
+   'cyan', 'orange', 'deepskyblue', 'yellow', 'tomato', 'lime', 'violet'
+ ];
+
+ // draws the board and the moving shape
+ Game.prototype.draw = function draw() {
+   if (this.ctx && !this.paused) {
+     for (let x = 0; x < this.COLS; ++x) {
+       for (let y = 0; y < this.ROWS; ++y) {
+         if (this.tetrisBoard[y][x]) {
+           this.ctx.strokeStyle = 'black';
+           this.ctx.lineWidth = "4";
+           this.ctx.fillStyle = this.colors[this.tetrisBoard[y][x] - 1];
+           this.ctx.fillRect(this.BLOCK_W * x, this.BLOCK_H * y, this.BLOCK_W - 1, this.BLOCK_H - 1);
+           this.ctx.strokeRect(this.BLOCK_W * x, this.BLOCK_H * y, this.BLOCK_W - 1, this.BLOCK_H - 1);
+         } else {
+           this.ctx.strokeStyle = 'black';
+           this.ctx.lineWidth = "0.5";
+           this.ctx.fillStyle = 'white';
+           this.ctx.fillRect(this.BLOCK_W * x + 1, this.BLOCK_H * y + 1, this.BLOCK_W - 1, this.BLOCK_H - 1);
+           this.ctx.strokeRect(this.BLOCK_W * x, this.BLOCK_H * y, this.BLOCK_W - 1, this.BLOCK_H - 1);
+         }
+       }
+     }
+
+     this.ctx.strokeStyle = 'black';
+     for (let y = 0; y < this.pieceSize; ++y) {
+       for (let x = 0; x < this.pieceSize; ++x) {
+         if (this.shape[y][x]) {
+           this.ctx.fillStyle = this.colors[this.shape[y][x] - 1];
+           this.ctx.lineWidth = "4";
+           this.ctx.fillRect(this.BLOCK_W * (x + this.currX), this.BLOCK_H * (y + this.currY), this.BLOCK_W - 1, this.BLOCK_H - 1);
+           this.ctx.strokeRect(this.BLOCK_W * (x + this.currX), this.BLOCK_H * (y + this.currY), this.BLOCK_W - 1, this.BLOCK_H - 1);
+         }
+       }
+     }
+   }
+   window.requestAnimationFrame(this.draw.bind(this));
+ };
 
 
-function createShape() {
+ Game.prototype.tick = function tick() {
+   if (this.paused) return;
+   if (this.valid(0, 1)) {
+     this.currY++;
+   } else {
+     this.modifyBoard();
+     this.lineCheck();
+     if (this.gameOver) {
+       this.newGame();
+       this.draw();
+       this.paused = true;
+       return;
+     }
+     this.createShape();
+   }
+ };
 
-  var randomShape = Math.floor(Math.random() * pieces.length)
+ Game.prototype.lineCheck = function lineCheck() {
+   let linesKilled = 0;
+   for (let y = this.ROWS - 1; y >= 0; --y) {
+     let clearLine = true;
+     for (let x = 0; x < this.COLS; ++x) {
+       if (!this.tetrisBoard[y][x]) {
+         clearLine = false;
+         break;
+       }
+     }
+     if (clearLine) {
+       linesKilled++;
+       for (let i = y; i > 0; --i) {
+         for (let j = 0; j < this.COLS; ++j) {
+           this.tetrisBoard[i][j] = this.tetrisBoard[i - 1][j];
+         }
+       }
+       y++;
+     }
+   }
+   if (linesKilled) {
+     this.linesKilled += linesKilled;
+     this.score += this.baseScore[linesKilled - 1] * (this.level + 1);
+     for (let i = 0; i < this.levels.length; i++) {
+       if (this.score > this.levels[i] && this.score < this.levels[i + 1]) {
+         this.level = this.levels[i];
+         console.log(this.level);
+         break;
+       }
+     }
+   }
+ };
 
-  if (randomShape == 0) { // if I shape, the matrix will be 4x4
-    pieceSize = 4;
-  } else {
-    pieceSize = 3;
-  }
+ Game.prototype.modifyBoard = function modifyBoard() {
+   for (let y = 0; y < this.pieceSize; ++y) {
+     for (let x = 0; x < this.pieceSize; ++x) {
+       if (this.shape[y][x]) {
+         this.tetrisBoard[this.currY + y][this.currX + x] = this.shape[y][x];
+       }
+     }
+   }
+ };
 
-  var counter = -pieceSize;
-  shape = [];
-  for (i = 0; i < pieceSize; i++) {
-    shape[ i ] = [];
-    for (j = 0; j < pieceSize; j++) {
-      if( counter < pieces[randomShape].length && i > 0) {
-        shape[i][j] = pieces[randomShape][counter];
-        } else {
-          shape[i][j] = 0;
-        }
-        counter++;
-      }
-    }
+ Game.prototype.valid = function valid(offsetX, offsetY, newCurrent) {
+   offsetX = offsetX || 0;
+   offsetY = offsetY || 0;
+   offsetX = this.currX + offsetX;
+   offsetY = this.currY + offsetY;
+   newCurrent = newCurrent || this.shape;
 
-    // set dimensions for the shape on the board
-    currX = 3;
-    currY = -1;
+   for (let y = 0; y < this.pieceSize; ++y) {
+     for (let x = 0; x < this.pieceSize; ++x) {
+       if (newCurrent[y][x]) {
+         if (typeof this.tetrisBoard[y + offsetY] == 'undefined' || typeof this.tetrisBoard[y + offsetY][x + offsetX] == 'undefined' || this.tetrisBoard[y + offsetY][x + offsetX] || x + offsetX < 0 || y + offsetY >= this.ROWS || x + offsetX >= this.COLS) {
+           if ((offsetY === 0 || offsetY == 1) && (offsetX >= 0 && offsetX < 11 - this.pieceSize)) {
+             this.gameOver = true;
+           }
+           return false;
+         }
+       }
+     }
+   }
+   return true;
+ };
 
-}
+ Game.prototype.dropDown = function dropDown() {
+   for (let y = this.pieceSize - 1; y >= 0; --y) {
+     for (let x = this.pieceSize - 1; x >= 0; --x) {
+       if (this.shape[y][x]) {
+         for (let offsetY = this.currY; offsetY < this.ROWS; ++offsetY) {
+           if (this.valid(0, 1)) {
+             this.currY++;
+           }
+         }
+       }
+     }
+   }
+ };
 
-function rotate() {
+ Game.prototype.newGame = function newGame() {
+   this.init();
+   this.score = 0;
+   this.gameOver = false;
+   this.createShape();
+ };
 
-  shapeString = shape.toString();
-  boxString = [[0,0,0],[0,5,5],[0,5,5]].toString();
+ Game.prototype.start = function start() {
+   this.resizeCanvas();
+   this.init();
+   this.createShape();
+   this.ticker = setInterval(this.tick.bind(this), this.difficulties[this.difficulty]);
+   window.requestAnimationFrame(this.draw.bind(this));
+ };
 
-  // don't rotate the square
-  if (shapeString == boxString) {
-    return shape;
-  }
-  var rotShape = [];
-  for ( i = 0; i < pieceSize; ++i ) {
-      rotShape[ i ] = [];
-      for ( j = 0; j < pieceSize; ++j ) {
-          rotShape[ i ][ j ] = shape[ pieceSize - j - 1 ][ i ];
-      }
-  }
-
-  // set the shape to be that of the rotated shape
-  return rotShape;
-}
-
-// clears the board
-function init() {
-    for(i = 0; i < ROWS; i++) {
-        tetrisBoard[i] = [];
-      for(j = 0; j < COLS; j++) {
-        tetrisBoard[i][j] = 0;
-      }
-    }
-}
-
-var colors = [
-    'cyan', 'orange', 'deepskyblue', 'yellow', 'tomato', 'lime', 'violet'
-];
-
-// draws the board and the moving shape
-function draw() {
-
-    for ( var x = 0; x < COLS; ++x ) {
-        for ( var y = 0; y < ROWS; ++y ) {
-            if ( tetrisBoard[ y ][ x ] ) {
-              ctx.strokeStyle = 'black';
-                ctx.lineWidth = "4";
-                ctx.fillStyle = colors[ tetrisBoard[ y ][ x ] - 1 ];
-                ctx.fillRect( BLOCK_W * x, BLOCK_H * y, BLOCK_W - 1 , BLOCK_H - 1 );
-                ctx.strokeRect( BLOCK_W * x, BLOCK_H * y, BLOCK_W - 1 , BLOCK_H - 1 );
-            }
-            else {
-              ctx.strokeStyle = 'black';
-              ctx.lineWidth = "0.8";
-              ctx.fillStyle = 'white';
-              ctx.fillRect( BLOCK_W * x+1, BLOCK_H * y+1, BLOCK_W - 1 , BLOCK_H - 1 );
-              ctx.strokeRect( BLOCK_W * x, BLOCK_H * y, BLOCK_W - 1 , BLOCK_H - 1 );
-            }
-        }
-    }
-
-      ctx.strokeStyle = 'black';
-      for ( var y = 0; y < pieceSize; ++y ) {
-          for ( var x = 0; x < pieceSize; ++x ) {
-              if ( shape[ y ][ x ] ) {
-                ctx.fillStyle = colors[ shape[ y ][ x ] - 1 ];
-                ctx.lineWidth = "4";
-                ctx.fillRect( BLOCK_W * (x+currX)  , BLOCK_H * (y+currY) , BLOCK_W - 1 , BLOCK_H - 1 );
-                ctx.strokeRect( BLOCK_W * (x+currX)  , BLOCK_H * (y+currY) , BLOCK_W - 1 , BLOCK_H - 1 );
-              }
-          }
-      }
-}
-
-
-function tick() {
-
-  if(valid(0, 1)) {
-    currY++;
-  } else {
-    modifyBoard();
-    lineCheck();
-    if(gameOver) {
-      return;
-    }
-    createShape();
-  }
-}
-
-function lineCheck() {
-
-  for ( var y = ROWS-1; y >= 0; --y ) {
-      var clearLine = true;
-      for ( var x = 0; x < COLS; ++x ) {
-        if(!tetrisBoard[y][x]) {
-          clearLine = false;
-          break;
-        }
-      }
-
-      if(clearLine) {
-        for ( var i = y; i> 0; --i ) {
-            for ( var j = 0; j < COLS; ++j ) {
-              tetrisBoard[i][j] = tetrisBoard[i-1][j];
-            }
-          }
-          y++;
-      }
-  }
-}
-
-function modifyBoard() {
-    for ( var y = 0; y < pieceSize; ++y ) {
-      for ( var x = 0; x < pieceSize; ++x ) {
-        if ( shape[ y ][ x ] ) {
-          tetrisBoard[currY + y][currX + x] = shape[y][x]
-        }
-      }
-    }
-}
-
-function valid( offsetX, offsetY, newCurrent ) {
-    offsetX = offsetX || 0;
-    offsetY = offsetY || 0;
-    offsetX = currX + offsetX;
-    offsetY = currY + offsetY;
-    newCurrent = newCurrent || shape;
-
-    for ( var y = 0; y < pieceSize; ++y ) {
-        for ( var x = 0; x < pieceSize; ++x ) {
-            if ( newCurrent[ y ][ x ] ) {
-                if ( typeof tetrisBoard[ y + offsetY ] == 'undefined'
-                  || typeof tetrisBoard[ y + offsetY ][ x + offsetX ] == 'undefined'
-                  || tetrisBoard[ y + offsetY ][ x + offsetX ]
-                  || x + offsetX < 0
-                  || y + offsetY >= ROWS
-                  || x + offsetX >= COLS ) {
-                    if((offsetY == 0 || offsetY == 1) && (offsetX >= 0 && offsetX < 11 - pieceSize)) {
-                      gameOver = true;
-                    }
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-function dropDown() {
-
-  for ( var y = pieceSize - 1; y >= 0; --y ) {
-      for ( var x = pieceSize - 1; x >= 0; --x ) {
-          if ( shape[ y ][ x ] ) {
-            for ( var offsetY = currY; offsetY < ROWS; ++offsetY ) {
-
-              if(valid(0,1)) {
-                  currY++;
-              }
-            }
-        }
-    }
-  }
-}
-
-function newGame() {
-  for ( var y = 0; y < ROWS; ++y ) {
-    for ( var x = 0; x < COLS; ++x ) {
-      tetrisBoard[y][x] = 0;
-    }
-  }
-  gameOver = false;
-  createShape();
-}
-
-function startGame() {
-    resizeCanvas();
-    init();
-    createShape();
-    draw();
-
-    setInterval( tick, 250 );
-    setInterval( draw, 30 );
-
-}
-
-function resizeCanvas() {
-  c.width = ((window.innerHeight/1.3) / 1.714);
-  c.height = window.innerHeight/1.3;
-  w = c.width;
-  h = c.height;
-  BLOCK_W = w/ COLS;
-  BLOCK_H  = h/ ROWS;
-}
-
-startGame();
+ Game.prototype.resizeCanvas = function resizeCanvas() {
+   this.c.width = ((window.innerHeight / 1.3) / 1.714);
+   this.c.height = window.innerHeight / 1.3;
+   this.w = this.c.width;
+   this.h = this.c.height;
+   this.BLOCK_W = this.w / this.COLS;
+   this.BLOCK_H = this.h / this.ROWS;
+ };

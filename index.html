@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Tetris</title>
-        <link rel = 'stylesheet' href = 'tetris.css'>
+        <script src='./javascript/tetris.js'></script>
     </head>
     <body>
-        <div id="title">JS TETRIS</div>
-        <div id="container">
-            <canvas width='350' height='600' ></canvas>
-        </div>
-        <div id="guide">CONTROLS: 'R' RESET, 'SPC' DROP, 'ARROWS' MOVE </div>
-        <script src='javascript/tetris.js'></script>
+        <canvas width='350' height='600' ></canvas>
+        <script>
+            let tetris = new Game();
+            tetris.start();
+        </script>
     </body>
 </html>
