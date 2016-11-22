@@ -6,8 +6,9 @@
     <body>
         <canvas width='350' height='600' ></canvas>
         <script>
-            let tetris = new Game();
+            let tetris = new Tetris();
             tetris.start();
+            tetris.on('scorechanged',e => console.log(e));
         </script>
     </body>
 </html>
